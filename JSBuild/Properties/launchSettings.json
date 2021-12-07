@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "JSBuild": {
+      "commandName": "Project",
+      "commandLineArgs": "--path .\\ --sw ./app/sw.ts",
+      "workingDirectory": "C:\\r\\WeightTracker\\WeightTracker\\src\\app\\src"
+    }
+  }
+}
