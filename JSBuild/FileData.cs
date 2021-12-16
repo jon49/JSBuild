@@ -22,7 +22,9 @@ internal class FileData {
         {
             Types.Add(FileType.HTMLScript);
         }
-        RelativePath = System.IO.Path.GetRelativePath(Environment.CurrentDirectory, Path.FullName);
+        RelativeDirectory = System.IO.Path.GetRelativePath(
+            Environment.CurrentDirectory,
+            System.IO.Path.GetDirectoryName(Path.FullName) ?? ".");
         NormalizedName =
             Types.Contains(FileType.TypeScript)
                 ? string.Concat(Path.FullName.AsSpan(0, Path.FullName.Length - 2), "js")
@@ -34,7 +36,7 @@ internal class FileData {
 
     public FileInfo Path { get; }
     public string NormalizedName { get; }
-    public string RelativePath { get; }
+    public string RelativeDirectory { get; }
     public List<FileData> Dependencies { get; } = new List<FileData>();
     public string Url { get; }
     public string? TempPath { get; set; }
@@ -51,7 +53,7 @@ internal class FileData {
             if (_hashUrl is null && !isHTML && Hash is { })
             {
                 var lastPeriod = Url.LastIndexOf(".");
-                _hashUrl = $"{Url[..lastPeriod]}.{Hash[(Hash.Length - 8)..]}{Url[lastPeriod..]}";
+                _hashUrl = $"{Url[..lastPeriod]}.{Hash[(Hash.Length - 8)..].ToLower()}{Url[lastPeriod..]}";
             }
             else if (isHTML)
             {

@@ -35,6 +35,8 @@ class Program
             : Environment.CurrentDirectory;
         Environment.CurrentDirectory = path;
 
+        var setupTime = stopwatch.ElapsedMilliseconds;
+
         var files =
             SearchDirectory(
                 directory: new DirectoryInfo(path),
@@ -44,24 +46,31 @@ class Program
             .Select(x => new FileData(x, swFileName))
             .ToDictionary(f => f.NormalizedName);
 
-        await Dependency.SetAsync(files, path);
-        var hierarchy = Hierarchy.Get(files.Values.ToArray());
-        foreach (var list in hierarchy)
-        {
-            await Parallel.ForEachAsync(list.Where(x => !x.IsServiceWorker), async (f, _) =>
-            {
-                using var p = new ProcessFile(f, files, path);
-                await p.StartAsync();
-            });
-        }
-        var serviceWorker = files.Values.FirstOrDefault(x => x.IsServiceWorker);
-        if (serviceWorker is { })
-        {
-            using var p = new ProcessFile(serviceWorker, files, path);
-            await p.StartAsync();
-        }
+        var directorySearchTime = stopwatch.ElapsedMilliseconds - setupTime;
 
-        Console.WriteLine(stopwatch.ElapsedMilliseconds);
+        await Dependency.SetAsync(files, path);
+
+        var setDependenciesTime = stopwatch.ElapsedMilliseconds - directorySearchTime;
+
+        var hierarchy = Hierarchy.Get(files.Values.ToArray());
+
+        var getHierarchyTime = stopwatch.ElapsedMilliseconds - setDependenciesTime;
+
+        await ProcessFiles.StartAsync(hierarchy, files, path);
+
+        var processFilesTime = stopwatch.ElapsedMilliseconds - getHierarchyTime;
+
+        CopyFiles.Start(files, @out);
+
+        var moveFilesTime = stopwatch.ElapsedMilliseconds - processFilesTime;
+
+        Console.WriteLine($"Setup: {setupTime}");
+        Console.WriteLine($"Directory Search: {directorySearchTime}");
+        Console.WriteLine($"Determine Dependencies: {setDependenciesTime}");
+        Console.WriteLine($"Hierarchy: {getHierarchyTime}");
+        Console.WriteLine($"Process Hash: {processFilesTime}");
+        Console.WriteLine($"Move Files: {moveFilesTime}");
+        Console.WriteLine($"Total: {stopwatch.ElapsedMilliseconds}");
         Console.WriteLine(ProcessFile.TempPath);
 
         var depth = 0;
