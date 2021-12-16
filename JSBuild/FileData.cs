@@ -22,20 +22,49 @@ internal class FileData {
         {
             Types.Add(FileType.HTMLScript);
         }
+        RelativePath = System.IO.Path.GetRelativePath(Environment.CurrentDirectory, Path.FullName);
+        NormalizedName =
+            Types.Contains(FileType.TypeScript)
+                ? string.Concat(Path.FullName.AsSpan(0, Path.FullName.Length - 2), "js")
+            : Path.FullName;
+        Url = $"/{System.IO.Path.GetRelativePath(Environment.CurrentDirectory, NormalizedName).Replace('\\', '/')}";
     }
 
     private static readonly Regex _isHTMLScript = new(@"\.html\.[tj]s", RegexOptions.Compiled);
 
     public FileInfo Path { get; }
-    public string NormalizedName
-        => Types.Contains(FileType.TypeScript)
-            ? string.Concat(Path.FullName.AsSpan(0, Path.FullName.Length - 2), "js")
-        : Path.FullName;
+    public string NormalizedName { get; }
+    public string RelativePath { get; }
     public List<FileData> Dependencies { get; } = new List<FileData>();
-    public string? HashFilename { get; set; }
+    public string Url { get; }
+    public string? TempPath { get; set; }
+    public string? Hash { get; set; }
     public List<FileType> Types { get; }
     public bool IsServiceWorker { get; }
     public bool InHierarchy { get; set; } = false;
+    private string? _hashUrl;
+    public string HashedUrl
+    {
+        get
+        {
+            var isHTML = Types.Contains(FileType.HTML);
+            if (_hashUrl is null && !isHTML && Hash is { })
+            {
+                var lastPeriod = Url.LastIndexOf(".");
+                _hashUrl = $"{Url[..lastPeriod]}.{Hash[(Hash.Length - 8)..]}{Url[lastPeriod..]}";
+            }
+            else if (isHTML)
+            {
+                _hashUrl = Url;
+            }
+            else if (_hashUrl is null)
+            {
+                return Url;
+            }
+            return _hashUrl;
+        }
+    }
+
     public override string ToString() => $"{Path.FullName} <> {Types} <> IsServiceWorker {IsServiceWorker}";
 
     public override int GetHashCode()

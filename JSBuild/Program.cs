@@ -2,6 +2,7 @@
 
 using static JSBuild.Util;
 using JSBuild.Utils;
+using System.Diagnostics;
 
 namespace JSBuild;
 
@@ -17,6 +18,8 @@ class Program
     /// <param name="out">Output directory.</param>
     static async Task Main(string path = "", string sw = "", string @out = "")
     {
+        var stopwatch = new Stopwatch();
+        stopwatch.Start();
         if (@out == string.Empty) @out = "./public";
         @out = Path.GetFullPath(@out);
         Directory.CreateDirectory(@out);
@@ -37,13 +40,29 @@ class Program
                 directory: new DirectoryInfo(path),
                 include: new[] { "*.ts", "*.js", "*.css", "*.html" },
                 exclude: new[] { ".d.ts" },
-                excludedDirectories: new[] { "node_modules" } )
+                excludedDirectories: new[] { "node_modules" })
             .Select(x => new FileData(x, swFileName))
-            .ToArray();
+            .ToDictionary(f => f.NormalizedName);
+
         await Dependency.SetAsync(files, path);
-        var hierarchy = Hierarchy.Get(files);
-        //var hash = new Dictionary<string, FileData>();
-        //GetHashes(files, hash);
+        var hierarchy = Hierarchy.Get(files.Values.ToArray());
+        foreach (var list in hierarchy)
+        {
+            await Parallel.ForEachAsync(list.Where(x => !x.IsServiceWorker), async (f, _) =>
+            {
+                using var p = new ProcessFile(f, files, path);
+                await p.StartAsync();
+            });
+        }
+        var serviceWorker = files.Values.FirstOrDefault(x => x.IsServiceWorker);
+        if (serviceWorker is { })
+        {
+            using var p = new ProcessFile(serviceWorker, files, path);
+            await p.StartAsync();
+        }
+
+        Console.WriteLine(stopwatch.ElapsedMilliseconds);
+        Console.WriteLine(ProcessFile.TempPath);
 
         var depth = 0;
         foreach (var level in hierarchy)
