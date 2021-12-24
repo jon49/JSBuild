@@ -60,7 +60,7 @@ class Program
 
         var processFilesTime = stopwatch.ElapsedMilliseconds - getHierarchyTime;
 
-        CopyFiles.Start(files, @out);
+        WriteFiles.Start(files, @out);
 
         var moveFilesTime = stopwatch.ElapsedMilliseconds - processFilesTime;
 

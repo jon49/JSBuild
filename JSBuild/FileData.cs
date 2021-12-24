@@ -49,19 +49,20 @@ internal class FileData {
     {
         get
         {
+            if (_hashUrl is { })
+            {
+                return _hashUrl;
+            }
+
             var isHTML = Types.Contains(FileType.HTML);
-            if (_hashUrl is null && !isHTML && Hash is { })
+            if (!isHTML && Hash is { } && !IsServiceWorker)
             {
                 var lastPeriod = Url.LastIndexOf(".");
                 _hashUrl = $"{Url[..lastPeriod]}.{Hash[(Hash.Length - 8)..].ToLower()}{Url[lastPeriod..]}";
             }
-            else if (isHTML)
+            else
             {
                 _hashUrl = Url;
-            }
-            else if (_hashUrl is null)
-            {
-                return Url;
             }
             return _hashUrl;
         }

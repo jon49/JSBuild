@@ -11,9 +11,11 @@ internal class ProcessFile : IDisposable
     private readonly OutBehavior _outBehavior;
     private readonly bool _shouldUpdateDependencies;
     private readonly DependencyProcessor<string>? _processor;
+    private readonly string _outDir;
 
-    public ProcessFile(FileData file, Dictionary<string, FileData> files, string root)
+    public ProcessFile(FileData file, Dictionary<string, FileData> files, string outDir)
     {
+        _outDir = outDir;
         _file = file;
         _files = files;
         _shouldUpdateDependencies = file.Dependencies.Any();
@@ -22,7 +24,7 @@ internal class ProcessFile : IDisposable
             _processor = new DependencyProcessor<string>(
                 file,
                 files,
-                root,
+                outDir,
                 (f, line, match) => line.Replace(match, f.HashedUrl));
         }
         _outBehavior =
@@ -104,7 +106,14 @@ internal class ProcessFile : IDisposable
             ? Task.Run(async delegate
             {
                 var reader = _fileWriterReader = new StreamReader(stream);
-                _file.TempPath = Path.Combine(TempPath, "." + _file.Url);
+                if (_file.IsServiceWorker)
+                {
+                    _file.TempPath = WriteFiles.GetOutFilename(_file, _outDir);
+                }
+                else
+                {
+                    _file.TempPath = Path.Combine(TempPath, "." + _file.Url);
+                }
                 Directory.CreateDirectory(Path.GetDirectoryName(_file.TempPath)!);
                 using var fs = new FileStream(_file.TempPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
                 string? line;
