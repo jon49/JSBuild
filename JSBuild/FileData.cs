@@ -1,12 +1,20 @@
-﻿using System.Text.RegularExpressions;
+﻿using JSBuild.Utils;
+using System.Text.RegularExpressions;
 
 namespace JSBuild;
 
 internal class FileData {
 
-    public FileData(FileInfo path, string serviceWorkerFilename)
+    private static readonly Regex _isHTMLScript = new(@"\.html\.[tj]s", RegexOptions.Compiled);
+    private readonly string root;
+    private readonly string outDir;
+    public static readonly string TempPath = System.IO.Path.Join(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString());
+
+    public FileData(FileInfo path, string serviceWorkerFilename, string root, string outDir)
     {
         Path = path ?? throw new ArgumentNullException(nameof(path));
+        this.root = root ?? throw new ArgumentNullException(nameof(root));
+        this.outDir = outDir ?? throw new ArgumentNullException(nameof(outDir));
         IsServiceWorker = Path.Name == serviceWorkerFilename;
 
         Types = new();
@@ -32,14 +40,42 @@ internal class FileData {
         Url = $"/{System.IO.Path.GetRelativePath(Environment.CurrentDirectory, NormalizedName).Replace('\\', '/')}";
     }
 
-    private static readonly Regex _isHTMLScript = new(@"\.html\.[tj]s", RegexOptions.Compiled);
-
     public FileInfo Path { get; }
     public string NormalizedName { get; }
     public string RelativeDirectory { get; }
     public List<FileData> Dependencies { get; } = new List<FileData>();
     public string Url { get; }
-    public string? TempPath { get; set; }
+
+    private string? _outFilename;
+    public string OutFilename
+    {
+        get
+        {
+            if (_outFilename is null)
+            {
+                var targetDirectory = System.IO.Path.Combine(outDir, RelativeDirectory);
+                Directory.CreateDirectory(targetDirectory);
+                _outFilename = System.IO.Path.Combine(targetDirectory, HashedUrl[(HashedUrl.LastIndexOf('/') + 1)..]);
+            }
+            return _outFilename;
+        }
+    }
+
+    private string? _tempFilename;
+    public string TempFilename
+    {
+        get
+        {
+            if (_tempFilename is null)
+            {
+                _tempFilename =
+                    IsServiceWorker
+                        ? OutFilename
+                    : System.IO.Path.Combine(TempPath, "." + Url);
+            }
+            return _tempFilename;
+        }
+    }
     public string? Hash { get; set; }
     public List<FileType> Types { get; }
     public bool IsServiceWorker { get; }

@@ -2,7 +2,7 @@
   "profiles": {
     "JSBuild": {
       "commandName": "Project",
-      "commandLineArgs": "--path .\\ --sw ./app/sw.ts --out ../public-test",
+      "commandLineArgs": "--path .\\ --sw ./app/sw.ts --out ../public-test --dev True",
       "workingDirectory": "C:\\r\\WeightTracker\\WeightTracker\\src\\app\\src"
     }
   }

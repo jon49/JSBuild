@@ -1,21 +1,18 @@
 ﻿using Nerdbank.Streams;
-using System.Text;
-using System.Security.Cryptography;
-
 namespace JSBuild.Utils;
 
-internal class ProcessFile : IDisposable
+internal class ProcessFile : IAsyncDisposable
 {
     private readonly FileData _file;
     private readonly Dictionary<string, FileData> _files;
     private readonly OutBehavior _outBehavior;
     private readonly bool _shouldUpdateDependencies;
     private readonly DependencyProcessor<string>? _processor;
-    private readonly string _outDir;
+    private readonly bool _dev;
 
-    public ProcessFile(FileData file, Dictionary<string, FileData> files, string outDir)
+    public ProcessFile(FileData file, Dictionary<string, FileData> files, string outDir, bool dev)
     {
-        _outDir = outDir;
+        _dev = dev;
         _file = file;
         _files = files;
         _shouldUpdateDependencies = file.Dependencies.Any();
@@ -33,38 +30,39 @@ internal class ProcessFile : IDisposable
             : OutBehavior.CopyOnly;
     }
 
-    public static readonly string TempPath = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString());
-    private FileReader? _fileReader;
-    private SimplexStream? _streamGetHash;
-    private StreamWriter? _writer;
-    private SimplexStream? _streamWriteTempFile;
-    private StreamWriter? _writer2;
-    private StreamReader? _fileWriterReader;
+    SimplexStream? writerStream = null;
+    StreamWriter? writer = null;
+    StreamWriter? writer2 = null;
+    SimplexStream? hashStream = null;
+    FileReader? fileReader = null;
     public Task StartAsync()
     {
-        _streamGetHash = new SimplexStream();
+        hashStream = new SimplexStream();
 
         if (_outBehavior == OutBehavior.IntermediateWrite)
         {
-            _streamWriteTempFile = new SimplexStream();
+            writerStream = new SimplexStream();
         }
 
         return Task.WhenAll(
-            WriteStreamsAsync(_streamGetHash, _streamWriteTempFile),
-            SetHashAsync(_streamGetHash),
-            WriteTempFileAsync(_streamWriteTempFile));
+            WriteStreamsAsync(hashStream, writerStream),
+            ProcessHash.StartAsync(hashStream, _file),
+            ProcessWriteFile.StartAsync(writerStream, _file.TempFilename, _dev));
     }
 
-    private Task WriteStreamsAsync(SimplexStream stream, SimplexStream? stream2)
+    private Task WriteStreamsAsync(SimplexStream stream, SimplexStream? writerStream)
         => Task.Run(async delegate
         {
-            _fileReader = new FileReader(_file);
-            _writer = new StreamWriter(stream);
-            if (stream2 is { }) _writer2 = new StreamWriter(stream2);
+            fileReader = new FileReader(_file);
+            writer = new StreamWriter(stream);
+            if (writerStream is { })
+            {
+                writer2 = new StreamWriter(writerStream);
+            }
 
             var searchingServiceWorkerList = _file.IsServiceWorker;
             string? line;
-            while ((line = await _fileReader.ReadLineAsync()) is { })
+            while ((line = await fileReader.ReadLineAsync()) is { })
             {
                 if (_shouldUpdateDependencies && _processor is { } && !_processor.FoundAllDependencies)
                 {
@@ -81,57 +79,41 @@ internal class ProcessFile : IDisposable
                     line = $@"const links = [""{urls}""];";
                     searchingServiceWorkerList = false;
                 }
-                await _writer.WriteLineAsync(line);
-                await _writer.FlushAsync();
-                if (_writer2 is { })
+
+                await writer.WriteLineAsync(line);
+                await writer.FlushAsync();
+                if (writer2 is { })
                 {
-                    await _writer2.WriteLineAsync(line);
-                    await _writer2.FlushAsync();
+                    await writer2.WriteLineAsync(line);
+                    await writer2.FlushAsync();
                 }
             }
             stream.CompleteWriting();
-            if (_streamWriteTempFile is { }) _streamWriteTempFile.CompleteWriting();
+            if (writerStream is { }) writerStream.CompleteWriting();
         });
 
-    private Task SetHashAsync(SimplexStream stream)
-        => Task.Run(async delegate
-        {
-            using var sha256 = SHA256.Create();
-            var hash = await sha256.ComputeHashAsync(stream);
-            _file.Hash = BitConverter.ToString(hash).Replace("-", "");
-        });
-
-    private Task WriteTempFileAsync(SimplexStream? stream)
-        => stream is { }
-            ? Task.Run(async delegate
-            {
-                var reader = _fileWriterReader = new StreamReader(stream);
-                if (_file.IsServiceWorker)
-                {
-                    _file.TempPath = WriteFiles.GetOutFilename(_file, _outDir);
-                }
-                else
-                {
-                    _file.TempPath = Path.Combine(TempPath, "." + _file.Url);
-                }
-                Directory.CreateDirectory(Path.GetDirectoryName(_file.TempPath)!);
-                using var fs = new FileStream(_file.TempPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
-                string? line;
-                while ((line = await reader.ReadLineAsync()) is { })
-                {
-                    await fs.WriteAsync(Encoding.UTF8.GetBytes(line));
-                }
-            })
-        : Task.CompletedTask;
-
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        _fileReader?.Dispose();
-        _streamGetHash?.Dispose();
-        _writer?.Dispose();
-        _streamWriteTempFile?.Dispose();
-        _writer2?.Dispose();
-        _fileWriterReader?.Dispose();
+        if (writer2 is { })
+        {
+            await writer2.WriteLineAsync();
+        }
+        if (writerStream is { })
+        {
+            await writerStream.DisposeAsync();
+        }
+        if (hashStream is { })
+        {
+            await hashStream.DisposeAsync();
+        }
+        if (fileReader is { })
+        {
+            fileReader.Dispose();
+        }
+        if (writer is { })
+        {
+            await writer.DisposeAsync();
+        }
     }
 }
 

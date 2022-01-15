@@ -4,7 +4,6 @@
     {
         public static List<List<FileData>> Get(FileData[] files)
         {
-            var number = 1;
             var list = new List<List<FileData>>();
             var set = new HashSet<string>();
 

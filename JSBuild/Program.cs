@@ -16,7 +16,10 @@ class Program
     /// <param name="path">Path to directory with source files.</param>
     /// <param name="sw">Service Worker filename.</param>
     /// <param name="out">Output directory.</param>
-    static async Task Main(string path = "", string sw = "", string @out = "")
+    /// <param name="dev">Developer build</param>
+#pragma warning disable VSTHRD200 // Use "Async" suffix for async methods
+    static async Task Main(string path = "", string sw = "", string @out = "", bool dev = false)
+#pragma warning restore VSTHRD200 // Use "Async" suffix for async methods
     {
         var stopwatch = new Stopwatch();
         stopwatch.Start();
@@ -43,7 +46,7 @@ class Program
                 include: new[] { "*.ts", "*.js", "*.css", "*.html" },
                 exclude: new[] { ".d.ts" },
                 excludedDirectories: new[] { "node_modules" })
-            .Select(x => new FileData(x, swFileName))
+            .Select(x => new FileData(path: x, serviceWorkerFilename: swFileName, root: path, outDir: @out))
             .ToDictionary(f => f.NormalizedName);
 
         var directorySearchTime = stopwatch.ElapsedMilliseconds - setupTime;
@@ -56,13 +59,14 @@ class Program
 
         var getHierarchyTime = stopwatch.ElapsedMilliseconds - setDependenciesTime;
 
-        await ProcessFiles.StartAsync(hierarchy, files, path);
+        await ProcessFiles.StartAsync(hierarchy, files, path, dev);
 
         var processFilesTime = stopwatch.ElapsedMilliseconds - getHierarchyTime;
 
-        WriteFiles.Start(files, @out);
+        WriteFiles.Start(files);
 
         var moveFilesTime = stopwatch.ElapsedMilliseconds - processFilesTime;
+        var totalTime = stopwatch.ElapsedMilliseconds;
 
         Console.WriteLine($"Setup: {setupTime}");
         Console.WriteLine($"Directory Search: {directorySearchTime}");
@@ -70,8 +74,8 @@ class Program
         Console.WriteLine($"Hierarchy: {getHierarchyTime}");
         Console.WriteLine($"Process Hash: {processFilesTime}");
         Console.WriteLine($"Move Files: {moveFilesTime}");
-        Console.WriteLine($"Total: {stopwatch.ElapsedMilliseconds}");
-        Console.WriteLine(ProcessFile.TempPath);
+        Console.WriteLine($"Total: {totalTime}");
+        Console.WriteLine(FileData.TempPath);
 
         var depth = 0;
         foreach (var level in hierarchy)
